@@ -232,3 +232,7 @@ func (m Money) String() string {
 func (m Money) Neg() Money {
 	return Money{m.d.Neg()}
 }
+
+func (m Money) Mod(value Money) Money {
+	return Money{d: m.d.Mod(value.d)}
+}
