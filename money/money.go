@@ -61,8 +61,20 @@ func (m *Money) UnmarshalBSONValue(dataType bsontype.Type, data []byte) error {
 			return errors.New("Can't convert to Decimal128 " + string(data))
 		}
 		m.d = decimal.NewFromInt32(i)
+	case bsontype.Int64:
+		i, _, ok := bsoncore.ReadInt64(data)
+		if !ok {
+			return errors.New("Can't convert to Decimal128 " + string(data))
+		}
+		m.d = decimal.NewFromInt(i)
+	case bsontype.Double:
+		i, _, ok := bsoncore.ReadDouble(data)
+		if !ok {
+			return errors.New("Can't convert to Decimal128 " + string(data))
+		}
+		m.d = decimal.NewFromFloat(i)
 	default:
-		return errors.New("Can't unmarshal BSON value as data type " + string(dataType))
+		return errors.New("Can't unmarshal BSON value as data type " + dataType.String() + " data is " + string(data))
 	}
 	return nil
 }
