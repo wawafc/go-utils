@@ -200,6 +200,30 @@ func (m Money) Round(num int32) Money {
 	return Money{m.d.Round(num)}
 }
 
+func (m Money) RoundBank(num int32) Money {
+	return Money{m.d.RoundBank(num)}
+}
+
+func (m Money) RoundCash(num uint8) Money {
+	return Money{m.d.RoundCash(num)}
+}
+
+func (m Money) RoundCeil(num int32) Money {
+	return Money{m.d.RoundCeil(num)}
+}
+
+func (m Money) RoundDown(num int32) Money {
+	return Money{m.d.RoundDown(num)}
+}
+
+func (m Money) RoundFloor(num int32) Money {
+	return Money{m.d.RoundFloor(num)}
+}
+
+func (m Money) RoundUp(num int32) Money {
+	return Money{m.d.RoundUp(num)}
+}
+
 func (m Money) Abs() Money {
 	return Money{m.d.Abs()}
 }
