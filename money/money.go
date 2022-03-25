@@ -1,10 +1,12 @@
 package money
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
@@ -228,6 +230,10 @@ func (m Money) Abs() Money {
 	return Money{m.d.Abs()}
 }
 
+func (m Money) Ceil() Money {
+	return Money{m.d.Ceil()}
+}
+
 func (m Money) Cmp(value Money) int {
 	return m.d.Cmp(value.d)
 }
@@ -271,4 +277,113 @@ func (m Money) Neg() Money {
 
 func (m Money) Mod(value Money) Money {
 	return Money{d: m.d.Mod(value.d)}
+}
+
+func (m Money) Pow(value Money) Money {
+	return Money{d: m.d.Pow(value.d)}
+}
+
+func (m Money) IsInteger() bool {
+	return m.d.IsInteger()
+}
+
+func (m Money) IsNegative() bool {
+	return m.d.IsNegative()
+}
+
+func (m Money) IsPositive() bool {
+	return m.d.IsPositive()
+}
+
+func (m Money) IsZero() bool {
+	return m.d.IsZero()
+}
+
+func (m Money) Copy() Money {
+	return Money{m.d.Copy()}
+}
+func (m Money) QuoRem(d2 Money, precision int32) (Money, Money) {
+	dq, dr := m.d.QuoRem(d2.d, precision)
+	return Money{dq}, Money{dr}
+}
+func (m Money) DivRound(d2 Money, precision int32) Money {
+	return Money{m.d.DivRound(d2.d, precision)}
+}
+func (m Money) ExpHullAbrham(overallPrecision uint32) (Money, error) {
+	d, err := m.d.ExpHullAbrham(overallPrecision)
+	return Money{d}, err
+}
+func (m Money) ExpTaylor(precision int32) (Money, error) {
+	d, err := m.d.ExpTaylor(precision)
+	return Money{d}, err
+}
+func (m Money) NumDigits() int {
+	return m.d.NumDigits()
+}
+func (m Money) Equals(d2 Money) bool {
+	return m.d.Equals(d2.d)
+}
+func (m Money) Sign() int {
+	return m.d.Sign()
+}
+
+func (m Money) Exponent() int32 {
+	return m.d.Exponent()
+}
+func (m Money) Coefficient() *big.Int {
+	return m.d.Coefficient()
+}
+func (m Money) CoefficientInt64() int64 {
+	return m.d.CoefficientInt64()
+}
+func (m Money) IntPart() int64 {
+	return m.d.IntPart()
+}
+func (m Money) BigInt() *big.Int {
+	return m.d.BigInt()
+}
+func (m Money) BigFloat() *big.Float {
+	return m.d.BigFloat()
+}
+func (m Money) Rat() *big.Rat {
+	return m.d.Rat()
+}
+func (m Money) InexactFloat64() float64 {
+	return m.d.InexactFloat64()
+}
+func (m Money) StringFixed(places int32) string {
+	return m.d.StringFixed(places)
+}
+func (m Money) StringFixedBank(places int32) string {
+	return m.d.StringFixedBank(places)
+}
+func (m Money) StringFixedCash(interval uint8) string {
+	return m.d.StringFixedCash(interval)
+}
+func (m Money) Truncate(precision int32) Money {
+	return Money{m.d.Truncate(precision)}
+}
+func (m Money) MarshalBinary() (data []byte, err error) {
+	return m.d.MarshalBinary()
+}
+func (m Money) Value() (driver.Value, error) {
+	return m.d.Value()
+}
+func (m Money) GobEncode() ([]byte, error) {
+	return m.d.GobEncode()
+}
+func (m Money) StringScaled(exp int32) string {
+	return m.d.StringScaled(exp)
+}
+func (m Money) Atan() Money {
+	return Money{m.d.Atan()}
+}
+func (m Money) Sin() Money {
+	return Money{m.d.Sin()}
+}
+func (m Money) Cos() Money {
+	return Money{m.d.Cos()}
+}
+func (m Money) Tan() Money {
+	return Money{m.d.Tan()}
 }
