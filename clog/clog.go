@@ -2,6 +2,8 @@ package clog
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"os"
@@ -98,4 +100,15 @@ func TraceLoggingMiddleware() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		return nil
 	}
+}
+
+func generator() string {
+	//timeNow := time.Now().Unix()
+	b := make([]byte, 4)
+	_, err := rand.Read(b)
+	if err != nil {
+		return fmt.Sprintf("ffffffff")
+		//return fmt.Sprintf("%v", timeNow)
+	}
+	return fmt.Sprintf("%x", b)
 }
