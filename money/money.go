@@ -39,6 +39,40 @@ type Money struct {
 	d decimal.Decimal
 }
 
+// Scan implements the sql.Scanner interface for database deserialization.
+func (d *Money) Scan(value interface{}) error {
+	// first try to see if the data is stored in database as a Numeric datatype
+	switch v := value.(type) {
+
+	case float32:
+		*d = NewMoneyFromFloat(float64(v))
+		return nil
+
+	case float64:
+		// numeric in sqlite3 sends us float64
+		*d = NewMoneyFromFloat(v)
+		return nil
+
+	case int64:
+		// at least in sqlite3 when the value is 0 in db, the data is sent
+		// to us as an int64 instead of a float64 ...
+		*d = NewMoneyFromFloat(float64(v))
+		return nil
+
+	case string:
+		m, err := NewMoneyFromString(v)
+		if err != nil {
+			return err
+		}
+		*d = m
+		return nil
+
+	default:
+		// default is trying to interpret value stored as string
+		return errors.New("unsupported type")
+	}
+}
+
 func (m Money) MarshalBSONValue() (bsontype.Type, []byte, error) {
 	s := m.d.String()
 	d, _ := primitive.ParseDecimal128(s)
