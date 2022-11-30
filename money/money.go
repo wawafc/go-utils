@@ -116,8 +116,7 @@ func (m *Money) UnmarshalBSONValue(dataType bsontype.Type, data []byte) error {
 }
 
 func (m Money) MarshalJSON() ([]byte, error) {
-	f, _ := m.d.Float64()
-	return json.Marshal(f)
+	return []byte(m.d.String()), nil
 }
 
 func (m *Money) UnmarshalJSON(data []byte) error {
