@@ -10,9 +10,6 @@ import (
 
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
-	"go.mongodb.org/mongo-driver/bson/bsontype"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 )
 
 func NewMoneyFromString(value string) (Money, error) {
@@ -71,48 +68,6 @@ func (d *Money) Scan(value interface{}) error {
 		// default is trying to interpret value stored as string
 		return errors.New("unsupported type")
 	}
-}
-
-func (m Money) MarshalBSONValue() (bsontype.Type, []byte, error) {
-	s := m.d.String()
-	d, _ := primitive.ParseDecimal128(s)
-	return bsontype.Decimal128, bsoncore.AppendDecimal128([]byte{}, d), nil
-}
-
-func (m *Money) UnmarshalBSONValue(dataType bsontype.Type, data []byte) error {
-	switch dataType {
-	case bsontype.Decimal128:
-		value, _, ok := bsoncore.ReadDecimal128(data)
-		if !ok {
-			return errors.New("Can't convert to Decimal128 " + string(data))
-		}
-		d, err := decimal.NewFromString(value.String())
-		if err != nil {
-			return err
-		}
-		m.d = d
-	case bsontype.Int32:
-		i, _, ok := bsoncore.ReadInt32(data)
-		if !ok {
-			return errors.New("Can't convert to Decimal128 " + string(data))
-		}
-		m.d = decimal.NewFromInt32(i)
-	case bsontype.Int64:
-		i, _, ok := bsoncore.ReadInt64(data)
-		if !ok {
-			return errors.New("Can't convert to Decimal128 " + string(data))
-		}
-		m.d = decimal.NewFromInt(i)
-	case bsontype.Double:
-		i, _, ok := bsoncore.ReadDouble(data)
-		if !ok {
-			return errors.New("Can't convert to Decimal128 " + string(data))
-		}
-		m.d = decimal.NewFromFloat(i)
-	default:
-		return errors.New("Can't unmarshal BSON value as data type " + dataType.String() + " data is " + string(data))
-	}
-	return nil
 }
 
 func (m Money) MarshalJSON() ([]byte, error) {
