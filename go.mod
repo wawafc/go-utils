@@ -3,6 +3,8 @@ module github.com/wawafc/go-utils
 go 1.19
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.21.0
+	github.com/aws/aws-sdk-go-v2/service/rekognition v1.30.6
 	github.com/gofiber/fiber/v2 v2.38.1
 	github.com/golang/protobuf v1.5.2
 	github.com/leekchan/accounting v1.0.0
@@ -14,8 +16,12 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.41 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.35 // indirect
+	github.com/aws/smithy-go v1.14.2 // indirect
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.15.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
