@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/leekchan/accounting"
 	"github.com/shopspring/decimal"
@@ -17,15 +18,18 @@ func NewMoneyFromString(value string) (Money, error) {
 	if err != nil {
 		return Money{}, err
 	}
-	return Money{rtn}, nil
+	return Money{
+		d:   rtn,
+		raw: value,
+	}, nil
 }
 
 func NewMoneyFromFloat(value float64) Money {
-	return Money{decimal.NewFromFloat(value)}
+	return Money{d: decimal.NewFromFloat(value)}
 }
 
 func NewMoneyFromDecimal(d decimal.Decimal) Money {
-	return Money{d}
+	return Money{d: d}
 }
 
 // Money handles monetary data, that used decimal to do operations on code,
@@ -33,13 +37,15 @@ func NewMoneyFromDecimal(d decimal.Decimal) Money {
 // https://docs.mongodb.com/manual/tutorial/model-monetary-data/#numeric-decimal
 
 type Money struct {
-	d decimal.Decimal
+	d   decimal.Decimal
+	raw string
 }
 
 // Scan implements the sql.Scanner interface for database deserialization.
 func (d *Money) Scan(value interface{}) error {
 	// first try to see if the data is stored in database as a Numeric datatype
 	switch v := value.(type) {
+
 	case float32:
 		*d = NewMoneyFromFloat(float64(v))
 		return nil
@@ -69,23 +75,24 @@ func (d *Money) Scan(value interface{}) error {
 	}
 }
 
+func (m Money) GetRawString() string {
+	return m.raw
+}
+
 func (m Money) MarshalJSON() ([]byte, error) {
 	return []byte(m.d.String()), nil
 }
 
 func (m *Money) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(string(data), "\"")
+	if s == "null" {
+		m.d = decimal.NewFromFloat(0)
+		return nil
+	}
 	var a float64
 	if err := json.Unmarshal(data, &a); err == nil {
 		m.d = decimal.NewFromFloat(a)
-		return nil
-	}
-
-	var b string
-	if err := json.Unmarshal(data, &b); err == nil {
-		m.d, err = decimal.NewFromString(b)
-		if err != nil {
-			return err
-		}
+		m.raw = s
 		return nil
 	}
 	return errors.New("cannot unmarshal with other types")
@@ -106,6 +113,7 @@ func (m *Money) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 		return err
 	}
 	m.d = value
+	m.raw = v
 	return nil
 }
 
@@ -115,6 +123,7 @@ func (m *Money) UnmarshalXMLAttr(attr xml.Attr) error {
 		return err
 	}
 	m.d = value
+	m.raw = attr.Value
 	return nil
 }
 
@@ -124,11 +133,12 @@ func (m *Money) UnmarshalText(text []byte) error {
 	str := string(text)
 
 	dec, err := decimal.NewFromString(str)
-	m.d = dec
 	if err != nil {
 		return fmt.Errorf("error decoding string '%s': %s", str, err)
 	}
 
+	m.d = dec
+	m.raw = str
 	return nil
 }
 
@@ -139,7 +149,7 @@ func (m Money) MarshalText() (text []byte, err error) {
 }
 
 func (m Money) Div(value Money) Money {
-	return Money{m.d.Div(value.d)}
+	return Money{d: m.d.Div(value.d)}
 }
 
 func (m Money) FormatString() string {
@@ -166,59 +176,59 @@ func (m Money) FloorWithDecimal(index int32) Money {
 	if index <= 0 {
 		return m
 	}
-	return Money{m.d.Shift(index).Floor().Shift(-index)}
+	return Money{d: m.d.Shift(index).Floor().Shift(-index)}
 }
 
 func (m Money) Sub(value Money) Money {
-	return Money{m.d.Sub(value.d)}
+	return Money{d: m.d.Sub(value.d)}
 }
 
 func (m Money) Add(value Money) Money {
-	return Money{m.d.Add(value.d)}
+	return Money{d: m.d.Add(value.d)}
 }
 
 func (m Money) Shift(shift int32) Money {
-	return Money{m.d.Shift(shift)}
+	return Money{d: m.d.Shift(shift)}
 }
 
 func (m Money) Mul(value Money) Money {
-	return Money{m.d.Mul(value.d)}
+	return Money{d: m.d.Mul(value.d)}
 }
 
 func (m Money) Round(num int32) Money {
-	return Money{m.d.Round(num)}
+	return Money{d: m.d.Round(num)}
 }
 
 func (m Money) RoundBank(num int32) Money {
-	return Money{m.d.RoundBank(num)}
+	return Money{d: m.d.RoundBank(num)}
 }
 
 func (m Money) RoundCash(num uint8) Money {
-	return Money{m.d.RoundCash(num)}
+	return Money{d: m.d.RoundCash(num)}
 }
 
 func (m Money) RoundCeil(num int32) Money {
-	return Money{m.d.RoundCeil(num)}
+	return Money{d: m.d.RoundCeil(num)}
 }
 
 func (m Money) RoundDown(num int32) Money {
-	return Money{m.d.RoundDown(num)}
+	return Money{d: m.d.RoundDown(num)}
 }
 
 func (m Money) RoundFloor(num int32) Money {
-	return Money{m.d.RoundFloor(num)}
+	return Money{d: m.d.RoundFloor(num)}
 }
 
 func (m Money) RoundUp(num int32) Money {
-	return Money{m.d.RoundUp(num)}
+	return Money{d: m.d.RoundUp(num)}
 }
 
 func (m Money) Abs() Money {
-	return Money{m.d.Abs()}
+	return Money{d: m.d.Abs()}
 }
 
 func (m Money) Ceil() Money {
-	return Money{m.d.Ceil()}
+	return Money{d: m.d.Ceil()}
 }
 
 func (m Money) Cmp(value Money) int {
@@ -251,7 +261,7 @@ func (m Money) Float64() float64 {
 }
 
 func (m Money) Floor() Money {
-	return Money{m.d.Floor()}
+	return Money{d: m.d.Floor()}
 }
 
 func (m Money) String() string {
@@ -259,7 +269,7 @@ func (m Money) String() string {
 }
 
 func (m Money) Neg() Money {
-	return Money{m.d.Neg()}
+	return Money{d: m.d.Neg()}
 }
 
 func (m Money) Mod(value Money) Money {
@@ -287,22 +297,22 @@ func (m Money) IsZero() bool {
 }
 
 func (m Money) Copy() Money {
-	return Money{m.d.Copy()}
+	return Money{d: m.d.Copy()}
 }
 func (m Money) QuoRem(d2 Money, precision int32) (Money, Money) {
 	dq, dr := m.d.QuoRem(d2.d, precision)
-	return Money{dq}, Money{dr}
+	return Money{d: dq}, Money{d: dr}
 }
 func (m Money) DivRound(d2 Money, precision int32) Money {
-	return Money{m.d.DivRound(d2.d, precision)}
+	return Money{d: m.d.DivRound(d2.d, precision)}
 }
 func (m Money) ExpHullAbrham(overallPrecision uint32) (Money, error) {
 	d, err := m.d.ExpHullAbrham(overallPrecision)
-	return Money{d}, err
+	return Money{d: d}, err
 }
 func (m Money) ExpTaylor(precision int32) (Money, error) {
 	d, err := m.d.ExpTaylor(precision)
-	return Money{d}, err
+	return Money{d: d}, err
 }
 func (m Money) NumDigits() int {
 	return m.d.NumDigits()
@@ -348,7 +358,7 @@ func (m Money) StringFixedCash(interval uint8) string {
 	return m.d.StringFixedCash(interval)
 }
 func (m Money) Truncate(precision int32) Money {
-	return Money{m.d.Truncate(precision)}
+	return Money{d: m.d.Truncate(precision)}
 }
 func (m Money) MarshalBinary() (data []byte, err error) {
 	return m.d.MarshalBinary()
@@ -363,14 +373,14 @@ func (m Money) StringScaled(exp int32) string {
 	return m.d.StringScaled(exp)
 }
 func (m Money) Atan() Money {
-	return Money{m.d.Atan()}
+	return Money{d: m.d.Atan()}
 }
 func (m Money) Sin() Money {
-	return Money{m.d.Sin()}
+	return Money{d: m.d.Sin()}
 }
 func (m Money) Cos() Money {
-	return Money{m.d.Cos()}
+	return Money{d: m.d.Cos()}
 }
 func (m Money) Tan() Money {
-	return Money{m.d.Tan()}
+	return Money{d: m.d.Tan()}
 }
