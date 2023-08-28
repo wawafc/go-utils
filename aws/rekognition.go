@@ -8,18 +8,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
 )
 
-type Client struct {
-	*rekognition.Client
-}
+//type Client struct {
+//	*rekognition.Client
+//}
+//
+//func NewRekognition(cfg aws.Config) *rekognition.Client {
+//	return rekognition.NewFromConfig(cfg)
+//}
 
-func NewRekognition(cfg aws.Config) *rekognition.Client {
-	return rekognition.NewFromConfig(cfg)
-
-}
-
-func (cli Client) CompareFace(source, dest []byte) (float32, error) {
+func CompareFace(cfg aws.Config, source, dest []byte) (float32, error) {
 
 	var similar float32
+
+	cli := rekognition.NewFromConfig(cfg)
 
 	input := &rekognition.CompareFacesInput{
 		//SimilarityThreshold: aws.Float64(90.000000),
