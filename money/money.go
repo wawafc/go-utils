@@ -40,7 +40,6 @@ type Money struct {
 func (d *Money) Scan(value interface{}) error {
 	// first try to see if the data is stored in database as a Numeric datatype
 	switch v := value.(type) {
-
 	case float32:
 		*d = NewMoneyFromFloat(float64(v))
 		return nil
