@@ -2,7 +2,6 @@ package money
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -89,14 +88,14 @@ func (m *Money) UnmarshalJSON(data []byte) error {
 		m.d = decimal.NewFromFloat(0)
 		return nil
 	}
-	var a float64
-	if err := json.Unmarshal(data, &a); err == nil {
-		m.d = decimal.NewFromFloat(a)
-		m.raw = s
-		return nil
-	}
-	return errors.New("cannot unmarshal with other types")
 
+	value, err := decimal.NewFromString(s)
+	if err != nil {
+		return err
+	}
+	m.d = value
+	m.raw = s
+	return nil
 }
 
 func (m Money) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
