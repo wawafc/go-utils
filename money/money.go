@@ -3,7 +3,6 @@ package money
 import (
 	"database/sql/driver"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -70,8 +69,37 @@ func (d *Money) Scan(value interface{}) error {
 
 	default:
 		// default is trying to interpret value stored as string
-		return errors.New("unsupported type")
+		str, err := unquoteIfQuoted(v)
+		if err != nil {
+			return err
+		}
+		m, err := NewMoneyFromString(str)
+		if err != nil {
+			return err
+		}
+		*d = m
+		return nil
 	}
+}
+
+func unquoteIfQuoted(value interface{}) (string, error) {
+	var bytes []byte
+
+	switch v := value.(type) {
+	case string:
+		bytes = []byte(v)
+	case []byte:
+		bytes = v
+	default:
+		return "", fmt.Errorf("could not convert value '%+v' to byte array of type '%T'",
+			value, value)
+	}
+
+	// If the amount is quoted, strip the quotes
+	if len(bytes) > 2 && bytes[0] == '"' && bytes[len(bytes)-1] == '"' {
+		bytes = bytes[1 : len(bytes)-1]
+	}
+	return string(bytes), nil
 }
 
 func (m Money) GetRawString() string {
