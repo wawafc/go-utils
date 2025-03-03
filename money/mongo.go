@@ -20,11 +20,11 @@ import (
 //	return nil
 //}
 
-func (m Money) MarshalBSONValue() (bson.Type, []byte, error) {
+func (m Money) MarshalBSONValue() (byte, []byte, error) {
 	s := m.d.String()
 	d, _ := bson.ParseDecimal128(s)
 	h, l := d.GetBytes()
-	return bson.TypeDecimal128, bsoncore.AppendDecimal128([]byte{}, h, l), nil
+	return byte(bson.TypeDecimal128), bsoncore.AppendDecimal128([]byte{}, h, l), nil
 }
 
 func (m *Money) UnmarshalBSONValue(dataType bson.Type, data []byte) error {
