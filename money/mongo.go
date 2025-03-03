@@ -3,9 +3,8 @@ package money
 import (
 	"errors"
 	"github.com/shopspring/decimal"
-	"go.mongodb.org/mongo-driver/bson/bsontype"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )
 
 //func (m Money) MarshalBSON() ([]byte, error) {
@@ -21,37 +20,40 @@ import (
 //	return nil
 //}
 
-func (m Money) MarshalBSONValue() (bsontype.Type, []byte, error) {
+func (m Money) MarshalBSONValue() (bson.Type, []byte, error) {
 	s := m.d.String()
-	d, _ := primitive.ParseDecimal128(s)
-	return bsontype.Decimal128, bsoncore.AppendDecimal128([]byte{}, d), nil
+	d, _ := bson.ParseDecimal128(s)
+	h, l := d.GetBytes()
+	return bson.TypeDecimal128, bsoncore.AppendDecimal128([]byte{}, h, l), nil
 }
 
-func (m *Money) UnmarshalBSONValue(dataType bsontype.Type, data []byte) error {
+func (m *Money) UnmarshalBSONValue(dataType bson.Type, data []byte) error {
 	switch dataType {
-	case bsontype.Decimal128:
-		value, _, ok := bsoncore.ReadDecimal128(data)
+	case bson.TypeDecimal128:
+		h, l, _, ok := bsoncore.ReadDecimal128(data)
 		if !ok {
 			return errors.New("Can't convert to Decimal128 " + string(data))
 		}
-		d, err := decimal.NewFromString(value.String())
+		d128 := bson.NewDecimal128(h, l)
+
+		d, err := decimal.NewFromString(d128.String())
 		if err != nil {
 			return err
 		}
 		m.d = d
-	case bsontype.Int32:
+	case bson.TypeInt32:
 		i, _, ok := bsoncore.ReadInt32(data)
 		if !ok {
 			return errors.New("Can't convert to Decimal128 " + string(data))
 		}
 		m.d = decimal.NewFromInt32(i)
-	case bsontype.Int64:
+	case bson.TypeInt64:
 		i, _, ok := bsoncore.ReadInt64(data)
 		if !ok {
 			return errors.New("Can't convert to Decimal128 " + string(data))
 		}
 		m.d = decimal.NewFromInt(i)
-	case bsontype.Double:
+	case bson.TypeDouble:
 		i, _, ok := bsoncore.ReadDouble(data)
 		if !ok {
 			return errors.New("Can't convert to Decimal128 " + string(data))
@@ -63,8 +65,8 @@ func (m *Money) UnmarshalBSONValue(dataType bsontype.Type, data []byte) error {
 	return nil
 }
 
-func (m Money) Decimal128() primitive.Decimal128 {
+func (m Money) Decimal128() bson.Decimal128 {
 	s := m.d.String()
-	d, _ := primitive.ParseDecimal128(s)
+	d, _ := bson.ParseDecimal128(s)
 	return d
 }
