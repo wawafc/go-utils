@@ -59,13 +59,7 @@ func (m *Value) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	value, err := decimal.NewFromString(s)
-	if err != nil {
-		return err
-	}
-	m.decimal = value
-	m.raw = s
-	return nil
+	return m.setFromString(s)
 }
 
 func (m Value) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
