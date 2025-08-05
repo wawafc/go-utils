@@ -2,7 +2,6 @@ package amount
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -50,15 +49,23 @@ func FromDecimal(d decimal.Decimal) Value {
 }
 
 func (m Value) MarshalJSON() ([]byte, error) {
-	return json.Marshal(m.String())
+	return []byte(m.String()), nil
 }
 
 func (m *Value) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
+	s := strings.Trim(string(data), "\"")
+	if s == "null" {
+		m.decimal = decimal.NewFromFloat(0)
+		return nil
+	}
+
+	value, err := decimal.NewFromString(s)
+	if err != nil {
 		return err
 	}
-	return m.setFromString(s)
+	m.decimal = value
+	m.raw = s
+	return nil
 }
 
 func (m Value) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
