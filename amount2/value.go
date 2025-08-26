@@ -1,17 +1,13 @@
-package amount
+package amount2
 
 import (
 	"database/sql/driver"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/shopspring/decimal"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/bsontype"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type Value struct {
@@ -92,39 +88,60 @@ func (m *Value) setFromString(s string) error {
 	return nil
 }
 
-func (m Value) MarshalBSONValue() (bsontype.Type, []byte, error) {
-	d128, _ := primitive.ParseDecimal128(m.String())
-	return bson.TypeDecimal128, bsoncore.AppendDecimal128(nil, d128), nil
+// MarshalBSONValue: เข้ารหัสเป็น BSON Decimal128 โดยใช้ bson.ParseDecimal128 + Type.MarshalValue
+func (m Value) MarshalBSONValue() (byte, []byte, error) {
+	d128, err := bson.ParseDecimal128(m.String())
+	if err != nil {
+		return 0, nil, err
+	}
+	// คืนค่าเป็น type + raw bytes โดยให้ตัวไดรเวอร์จัดรูปแบบให้
+	t, data, err := bson.MarshalValue(d128) // ฟังก์ชัน ไม่ใช่เมธอด
+	if err != nil {
+		return 0, nil, err
+	}
+	return byte(t), data, nil
 }
 
-func (m *Value) UnmarshalBSONValue(t bsontype.Type, data []byte) error {
-	switch t {
+// UnmarshalBSONValue: รองรับหลาย BSON type แล้วแปลงเป็น shopspring/decimal
+func (m *Value) UnmarshalBSONValue(t byte, data []byte) error {
+	switch bson.Type(t) {
 	case bson.TypeDecimal128:
-		d128, _, ok := bsoncore.ReadDecimal128(data)
-		if !ok {
-			return errors.New("invalid decimal128")
+		var d128 bson.Decimal128
+		if err := bson.UnmarshalValue(bson.TypeDecimal128, data, &d128); err != nil {
+			return err
 		}
 		return m.setFromString(d128.String())
+
 	case bson.TypeInt32:
-		i, _, ok := bsoncore.ReadInt32(data)
-		if !ok {
-			return errors.New("invalid int32")
+		var i int32
+		if err := bson.UnmarshalValue(bson.TypeInt32, data, &i); err != nil {
+			return err
 		}
 		m.decimal = decimal.NewFromInt32(i)
+
 	case bson.TypeInt64:
-		i, _, ok := bsoncore.ReadInt64(data)
-		if !ok {
-			return errors.New("invalid int64")
+		var i int64
+		if err := bson.UnmarshalValue(bson.TypeInt64, data, &i); err != nil {
+			return err
 		}
 		m.decimal = decimal.NewFromInt(i)
+
 	case bson.TypeDouble:
-		f, _, ok := bsoncore.ReadDouble(data)
-		if !ok {
-			return errors.New("invalid float64")
+		var f float64
+		if err := bson.UnmarshalValue(bson.TypeDouble, data, &f); err != nil {
+			return err
 		}
 		m.decimal = decimal.NewFromFloat(f)
+
+	case bson.TypeString:
+		var s string
+		if err := bson.UnmarshalValue(bson.TypeString, data, &s); err != nil {
+			return err
+		}
+		return m.setFromString(s)
+
 	default:
-		return fmt.Errorf("unsupported BSON type: %s", t)
+		return fmt.Errorf("unsupported BSON type: %s", bson.Type(t))
 	}
 	return nil
 }
