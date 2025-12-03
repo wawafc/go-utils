@@ -179,6 +179,11 @@ func (m Money) Div(value Money) Money {
 	return Money{d: m.d.Div(value.d)}
 }
 
+func (m Money) FormatStringAdvance(precision int) string {
+	f, _ := m.d.Float64()
+	return accounting.FormatNumberFloat64(f, precision, ",", ".")
+}
+
 func (m Money) FormatString() string {
 	f, _ := m.d.Round(2).Float64()
 	return accounting.FormatNumberFloat64(f, 2, ",", ".")
