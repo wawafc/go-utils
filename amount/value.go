@@ -19,6 +19,8 @@ type Value struct {
 	raw     string
 }
 
+var Zero = Value{}
+
 func FromString(s string) (Value, error) {
 	d, err := decimal.NewFromString(s)
 	if err != nil {
@@ -185,7 +187,11 @@ func (m Value) Float64() float64             { f, _ := m.decimal.Float64(); retu
 func (m Value) Int64() int64                 { return m.decimal.IntPart() }
 func (m Value) Int32() int32                 { return int32(m.decimal.IntPart()) }
 func (m Value) Int() int                     { return int(m.decimal.IntPart()) }
-func (m Value) IsZero() bool                 { return m.decimal.IsZero() }
+func (m Value) IsZero() bool                 { return m.decimal.IsZero() }      // == 0
+func (m Value) IsPositive() bool             { return m.decimal.IsPositive() }  // > 0
+func (m Value) IsPositiveOrZero() bool       { return !m.decimal.IsNegative() } // >= 0
+func (m Value) IsNegative() bool             { return m.decimal.IsNegative() }  // < 0
+func (m Value) IsNegativeOrZero() bool       { return !m.decimal.IsPositive() } // <= 0
 func (m Value) Equal(other Value) bool       { return m.decimal.Equal(other.decimal) }
 func (m Value) GreaterThan(other Value) bool { return m.decimal.GreaterThan(other.decimal) }
 func (m Value) LessThan(other Value) bool    { return m.decimal.LessThan(other.decimal) }
