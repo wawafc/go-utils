@@ -12,6 +12,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"math"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -32,11 +33,13 @@ const (
 
 var Zero Value = 0
 
-func FromFloat(f float64) Value   { return Value(f * scaleF64) }
+// FromFloat rounds to the nearest scaled unit to avoid repeating-decimal
+// drift (e.g., 0.1 * 1e6 = 99999.99999... without rounding).
+func FromFloat(f float64) Value   { return Value(math.Round(f * scaleF64)) }
 func FromInt(i int) Value         { return Value(int64(i) * Scale) }
 func FromInt64(i int64) Value     { return Value(i * Scale) }
 func FromInt32(i int32) Value     { return Value(int64(i) * Scale) }
-func FromRaw(scaled int64) Value  { return Value(scaled) }
+func FromScaled(scaled int64) Value { return Value(scaled) }
 
 func FromString(s string) (Value, error) {
 	var v Value
@@ -46,16 +49,20 @@ func FromString(s string) (Value, error) {
 	return v, nil
 }
 
+// FromDecimal converts via decimal's own precision (no float64 round-trip).
+// Truncates beyond 6 decimal places toward zero.
 func FromDecimal(d decimal.Decimal) Value {
-	f, _ := d.Float64()
-	return FromFloat(f)
+	return Value(d.Shift(6).Truncate(0).IntPart())
 }
 
 func (m Value) Float64() float64 { return float64(m) / scaleF64 }
 func (m Value) Int64() int64     { return int64(m) / Scale }
 func (m Value) Int32() int32     { return int32(int64(m) / Scale) }
 func (m Value) Int() int         { return int(int64(m) / Scale) }
-func (m Value) Raw() int64       { return int64(m) }
+// Scaled returns the raw int64 scaled by 10^6.
+// Named Scaled (not Raw) to avoid collision with amount.Value.Raw() which
+// returns the original input string.
+func (m Value) Scaled() int64 { return int64(m) }
 
 func (m Value) Add(o Value) Value { return m + o }
 func (m Value) Sub(o Value) Value { return m - o }
