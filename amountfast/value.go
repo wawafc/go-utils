@@ -24,27 +24,30 @@ import (
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 )
 
-type Value int64
+type Value struct {
+	scaled int64
+	raw    string
+}
 
 const (
 	Scale    = 1_000_000
 	scaleF64 = float64(Scale)
 )
 
-var Zero Value = 0
+var Zero = Value{}
 
 // FromFloat rounds to the nearest scaled unit to avoid repeating-decimal
 // drift (e.g., 0.1 * 1e6 = 99999.99999... without rounding).
-func FromFloat(f float64) Value   { return Value(math.Round(f * scaleF64)) }
-func FromInt(i int) Value         { return Value(int64(i) * Scale) }
-func FromInt64(i int64) Value     { return Value(i * Scale) }
-func FromInt32(i int32) Value     { return Value(int64(i) * Scale) }
-func FromScaled(scaled int64) Value { return Value(scaled) }
+func FromFloat(f float64) Value     { return Value{scaled: int64(math.Round(f * scaleF64))} }
+func FromInt(i int) Value           { return Value{scaled: int64(i) * Scale} }
+func FromInt64(i int64) Value       { return Value{scaled: i * Scale} }
+func FromInt32(i int32) Value       { return Value{scaled: int64(i) * Scale} }
+func FromScaled(scaled int64) Value { return Value{scaled: scaled} }
 
 func FromString(s string) (Value, error) {
 	var v Value
 	if err := v.setFromString(s); err != nil {
-		return 0, err
+		return Value{}, err
 	}
 	return v, nil
 }
@@ -52,89 +55,92 @@ func FromString(s string) (Value, error) {
 // FromDecimal converts via decimal's own precision (no float64 round-trip).
 // Truncates beyond 6 decimal places toward zero.
 func FromDecimal(d decimal.Decimal) Value {
-	return Value(d.Shift(6).Truncate(0).IntPart())
+	return Value{scaled: d.Shift(6).Truncate(0).IntPart()}
 }
 
-func (m Value) Float64() float64 { return float64(m) / scaleF64 }
-func (m Value) Int64() int64     { return int64(m) / Scale }
-func (m Value) Int32() int32     { return int32(int64(m) / Scale) }
-func (m Value) Int() int         { return int(int64(m) / Scale) }
+func (m Value) Float64() float64 { return float64(m.scaled) / scaleF64 }
+func (m Value) Int64() int64     { return m.scaled / Scale }
+func (m Value) Int32() int32     { return int32(m.scaled / Scale) }
+func (m Value) Int() int         { return int(m.scaled / Scale) }
+
 // Scaled returns the raw int64 scaled by 10^6.
-// Named Scaled (not Raw) to avoid collision with amount.Value.Raw() which
-// returns the original input string.
-func (m Value) Scaled() int64 { return int64(m) }
+func (m Value) Scaled() int64 { return m.scaled }
 
-func (m Value) Add(o Value) Value { return m + o }
-func (m Value) Sub(o Value) Value { return m - o }
-func (m Value) Neg() Value        { return -m }
+// Raw returns the original input string (set via FromString/Scan/Unmarshal*).
+// Empty for values constructed from numeric types.
+func (m Value) Raw() string { return m.raw }
+
+func (m Value) Add(o Value) Value { return Value{scaled: m.scaled + o.scaled} }
+func (m Value) Sub(o Value) Value { return Value{scaled: m.scaled - o.scaled} }
+func (m Value) Neg() Value        { return Value{scaled: -m.scaled} }
 func (m Value) Abs() Value {
-	if m < 0 {
-		return -m
+	if m.scaled < 0 {
+		return Value{scaled: -m.scaled}
 	}
-	return m
+	return Value{scaled: m.scaled}
 }
-func (m Value) Copy() Value { return m }
+func (m Value) Copy() Value { return Value{scaled: m.scaled, raw: m.raw} }
 
 // Mul multiplies two Value operands using a 128-bit intermediate. Truncates.
 func (m Value) Mul(o Value) Value {
-	neg := (m < 0) != (o < 0)
-	a, b := abs64(int64(m)), abs64(int64(o))
+	neg := (m.scaled < 0) != (o.scaled < 0)
+	a, b := abs64(m.scaled), abs64(o.scaled)
 	hi, lo := bits.Mul64(a, b)
 	q, _ := bits.Div64(hi, lo, Scale)
-	r := Value(q)
+	r := int64(q)
 	if neg {
-		return -r
+		r = -r
 	}
-	return r
+	return Value{scaled: r}
 }
 
 // MulInt multiplies by a plain integer. Use when multiplier has no decimal
 // part — faster than Mul.
-func (m Value) MulInt(n int64) Value { return m * Value(n) }
+func (m Value) MulInt(n int64) Value { return Value{scaled: m.scaled * n} }
 
 // Div divides truncating toward zero. Returns 0 if divisor is zero.
 func (m Value) Div(o Value) Value {
-	if o == 0 {
-		return 0
+	if o.scaled == 0 {
+		return Value{}
 	}
-	neg := (m < 0) != (o < 0)
-	a, b := abs64(int64(m)), abs64(int64(o))
+	neg := (m.scaled < 0) != (o.scaled < 0)
+	a, b := abs64(m.scaled), abs64(o.scaled)
 	hi, lo := bits.Mul64(a, Scale)
 	q, _ := bits.Div64(hi, lo, b)
-	r := Value(q)
+	r := int64(q)
 	if neg {
-		return -r
+		r = -r
 	}
-	return r
+	return Value{scaled: r}
 }
 
 func (m Value) DivInt(n int64) Value {
 	if n == 0 {
-		return 0
+		return Value{}
 	}
-	return m / Value(n)
+	return Value{scaled: m.scaled / n}
 }
 
 // Truncate reduces to given number of decimal places (0-6), toward zero.
 func (m Value) Truncate(places int32) Value { return m.RoundDown(places) }
 
-func (m Value) IsZero() bool           { return m == 0 }
-func (m Value) IsPositive() bool       { return m > 0 }
-func (m Value) IsPositiveOrZero() bool { return m >= 0 }
-func (m Value) IsNegative() bool       { return m < 0 }
-func (m Value) IsNegativeOrZero() bool { return m <= 0 }
+func (m Value) IsZero() bool           { return m.scaled == 0 }
+func (m Value) IsPositive() bool       { return m.scaled > 0 }
+func (m Value) IsPositiveOrZero() bool { return m.scaled >= 0 }
+func (m Value) IsNegative() bool       { return m.scaled < 0 }
+func (m Value) IsNegativeOrZero() bool { return m.scaled <= 0 }
 
-func (m Value) Equal(o Value) bool              { return m == o }
-func (m Value) GreaterThan(o Value) bool        { return m > o }
-func (m Value) GreaterThanOrEqual(o Value) bool { return m >= o }
-func (m Value) LessThan(o Value) bool           { return m < o }
-func (m Value) LessThanOrEqual(o Value) bool    { return m <= o }
+func (m Value) Equal(o Value) bool              { return m.scaled == o.scaled }
+func (m Value) GreaterThan(o Value) bool        { return m.scaled > o.scaled }
+func (m Value) GreaterThanOrEqual(o Value) bool { return m.scaled >= o.scaled }
+func (m Value) LessThan(o Value) bool            { return m.scaled < o.scaled }
+func (m Value) LessThanOrEqual(o Value) bool     { return m.scaled <= o.scaled }
 
 func (m Value) Cmp(o Value) int {
 	switch {
-	case m < o:
+	case m.scaled < o.scaled:
 		return -1
-	case m > o:
+	case m.scaled > o.scaled:
 		return 1
 	default:
 		return 0
@@ -143,9 +149,9 @@ func (m Value) Cmp(o Value) int {
 
 func (m Value) Sign() int {
 	switch {
-	case m < 0:
+	case m.scaled < 0:
 		return -1
-	case m > 0:
+	case m.scaled > 0:
 		return 1
 	default:
 		return 0
@@ -167,10 +173,11 @@ func (m Value) Round(places int32) Value {
 		return m
 	}
 	half := div / 2
-	if m >= 0 {
-		return ((m + half) / div) * div
+	s := m.scaled
+	if s >= 0 {
+		return Value{scaled: ((s + half) / div) * div}
 	}
-	return ((m - half) / div) * div
+	return Value{scaled: ((s - half) / div) * div}
 }
 
 // RoundBank uses banker's rounding (half-to-even).
@@ -180,8 +187,9 @@ func (m Value) RoundBank(places int32) Value {
 		return m
 	}
 	half := div / 2
-	q := m / div
-	r := m % div
+	s := m.scaled
+	q := s / div
+	r := s % div
 	abs := r
 	if abs < 0 {
 		abs = -abs
@@ -190,7 +198,7 @@ func (m Value) RoundBank(places int32) Value {
 	case abs < half:
 		// round toward zero (already truncated)
 	case abs > half:
-		if m >= 0 {
+		if s >= 0 {
 			q++
 		} else {
 			q--
@@ -198,14 +206,21 @@ func (m Value) RoundBank(places int32) Value {
 	default:
 		// exactly half — round to even
 		if q%2 != 0 {
-			if m >= 0 {
+			if s >= 0 {
 				q++
 			} else {
 				q--
 			}
 		}
 	}
-	return q * div
+	return Value{scaled: q * div}
+}
+
+// RoundCash rounds to the nearest cash-interval (e.g., 5 → round to 0.05).
+// Behavior matches shopspring/decimal.RoundCash.
+func (m Value) RoundCash(interval uint8) Value {
+	d := decimal.New(m.scaled, -6).RoundCash(interval)
+	return Value{scaled: d.Shift(6).Truncate(0).IntPart(), raw: m.raw}
 }
 
 func (m Value) RoundCeil(places int32) Value {
@@ -213,12 +228,12 @@ func (m Value) RoundCeil(places int32) Value {
 	if !ok {
 		return m
 	}
-	q := m / div
-	r := m % div
+	q := m.scaled / div
+	r := m.scaled % div
 	if r > 0 {
 		q++
 	}
-	return q * div
+	return Value{scaled: q * div}
 }
 
 func (m Value) RoundFloor(places int32) Value {
@@ -226,12 +241,12 @@ func (m Value) RoundFloor(places int32) Value {
 	if !ok {
 		return m
 	}
-	q := m / div
-	r := m % div
+	q := m.scaled / div
+	r := m.scaled % div
 	if r < 0 {
 		q--
 	}
-	return q * div
+	return Value{scaled: q * div}
 }
 
 func (m Value) RoundDown(places int32) Value {
@@ -239,7 +254,7 @@ func (m Value) RoundDown(places int32) Value {
 	if !ok {
 		return m
 	}
-	return (m / div) * div
+	return Value{scaled: (m.scaled / div) * div}
 }
 
 func (m Value) RoundUp(places int32) Value {
@@ -247,27 +262,27 @@ func (m Value) RoundUp(places int32) Value {
 	if !ok {
 		return m
 	}
-	q := m / div
-	r := m % div
+	q := m.scaled / div
+	r := m.scaled % div
 	switch {
 	case r > 0:
 		q++
 	case r < 0:
 		q--
 	}
-	return q * div
+	return Value{scaled: q * div}
 }
 
 // roundDiv returns the divisor to drop digits below `places`.
 // Returns (_, false) when places >= 6 (nothing to round).
-func roundDiv(places int32) (Value, bool) {
+func roundDiv(places int32) (int64, bool) {
 	if places >= 6 {
 		return 0, false
 	}
 	if places < 0 {
 		places = 0
 	}
-	div := Value(1)
+	div := int64(1)
 	for i := int32(0); i < 6-places; i++ {
 		div *= 10
 	}
@@ -277,25 +292,32 @@ func roundDiv(places int32) (Value, bool) {
 // --- Decimal interop ---
 
 func (m Value) Decimal() decimal.Decimal {
-	return decimal.New(int64(m), -6)
+	return decimal.New(m.scaled, -6)
 }
 
 // --- String / formatting ---
 
+// String matches shopspring/decimal: strips trailing zeros, no trailing dot.
 func (m Value) String() string {
-	neg := m < 0
+	s := m.scaled
+	neg := s < 0
 	if neg {
-		m = -m
+		s = -s
 	}
-	intPart := int64(m) / Scale
-	fracPart := int64(m) % Scale
+	intPart := s / Scale
+	fracPart := s % Scale
 
 	sign := ""
 	if neg {
 		sign = "-"
 	}
-	return sign + strconv.FormatInt(intPart, 10) + "." +
-		padLeft(strconv.FormatInt(fracPart, 10), 6, '0')
+	if fracPart == 0 {
+		return sign + strconv.FormatInt(intPart, 10)
+	}
+	frac := padLeft(strconv.FormatInt(fracPart, 10), 6, '0')
+	// strip trailing zeros
+	frac = strings.TrimRight(frac, "0")
+	return sign + strconv.FormatInt(intPart, 10) + "." + frac
 }
 
 func padLeft(s string, width int, pad byte) string {
@@ -380,7 +402,7 @@ func (m Value) MarshalJSON() ([]byte, error) { return []byte(m.String()), nil }
 func (m *Value) UnmarshalJSON(data []byte) error {
 	s := strings.Trim(string(data), "\"")
 	if s == "null" || s == "" {
-		*m = 0
+		*m = Value{}
 		return nil
 	}
 	return m.setFromString(s)
@@ -398,7 +420,7 @@ func (m *Value) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	return m.setFromString(s)
 }
 
-func (m Value) MarshalText() ([]byte, error)    { return []byte(m.String()), nil }
+func (m Value) MarshalText() ([]byte, error)     { return []byte(m.String()), nil }
 func (m *Value) UnmarshalText(text []byte) error { return m.setFromString(string(text)) }
 
 func (m Value) MarshalYAML() (interface{}, error) { return m.String(), nil }
@@ -483,21 +505,22 @@ func (m *Value) Scan(value interface{}) error {
 }
 
 func (m *Value) setFromString(s string) error {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		*m = 0
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		*m = Value{}
 		return nil
 	}
+	body := trimmed
 	neg := false
-	switch s[0] {
+	switch body[0] {
 	case '-':
 		neg = true
-		s = s[1:]
+		body = body[1:]
 	case '+':
-		s = s[1:]
+		body = body[1:]
 	}
 
-	intStr, fracStr, _ := strings.Cut(s, ".")
+	intStr, fracStr, _ := strings.Cut(body, ".")
 	if intStr == "" {
 		intStr = "0"
 	}
@@ -520,6 +543,7 @@ func (m *Value) setFromString(s string) error {
 	if neg {
 		result = -result
 	}
-	*m = Value(result)
+	m.scaled = result
+	m.raw = s
 	return nil
 }
