@@ -99,3 +99,37 @@ func BenchmarkFast_String(b *testing.B) {
 		_ = x.String()
 	}
 }
+
+func BenchmarkAmount_Div(b *testing.B) {
+	x := amount.FromFloat(100)
+	y := amount.FromFloat(7)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = x.Div(y)
+	}
+}
+
+func BenchmarkFast_Div(b *testing.B) {
+	x := amountfast.FromFloat(100)
+	y := amountfast.FromFloat(7)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = x.Div(y)
+	}
+}
+
+func BenchmarkAmount_Round(b *testing.B) {
+	x := amount.FromFloat(1234.56789)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = x.Round(2)
+	}
+}
+
+func BenchmarkFast_Round(b *testing.B) {
+	x := amountfast.FromFloat(1234.56789)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = x.Round(2)
+	}
+}

@@ -82,11 +82,18 @@ func (m Value) Abs() Value {
 func (m Value) Copy() Value { return Value{scaled: m.scaled, raw: m.raw} }
 
 // Mul multiplies two Value operands using a 128-bit intermediate. Truncates.
+// On arm64 bits.Div64 is a software routine, so we skip it whenever the
+// 128-bit product fits in 64 bits (hi == 0) — the common case.
 func (m Value) Mul(o Value) Value {
 	neg := (m.scaled < 0) != (o.scaled < 0)
 	a, b := abs64(m.scaled), abs64(o.scaled)
 	hi, lo := bits.Mul64(a, b)
-	q, _ := bits.Div64(hi, lo, Scale)
+	var q uint64
+	if hi == 0 {
+		q = lo / Scale
+	} else {
+		q, _ = bits.Div64(hi, lo, Scale)
+	}
 	r := int64(q)
 	if neg {
 		r = -r
@@ -99,6 +106,8 @@ func (m Value) Mul(o Value) Value {
 func (m Value) MulInt(n int64) Value { return Value{scaled: m.scaled * n} }
 
 // Div divides truncating toward zero. Returns 0 if divisor is zero.
+// Fast path: skip bits.Div64 when a*Scale fits in uint64 (|a| < 2^44),
+// which covers all realistic money magnitudes (up to ~1.8e7 units).
 func (m Value) Div(o Value) Value {
 	if o.scaled == 0 {
 		return Value{}
@@ -106,7 +115,12 @@ func (m Value) Div(o Value) Value {
 	neg := (m.scaled < 0) != (o.scaled < 0)
 	a, b := abs64(m.scaled), abs64(o.scaled)
 	hi, lo := bits.Mul64(a, Scale)
-	q, _ := bits.Div64(hi, lo, b)
+	var q uint64
+	if hi == 0 {
+		q = lo / b
+	} else {
+		q, _ = bits.Div64(hi, lo, b)
+	}
 	r := int64(q)
 	if neg {
 		r = -r
@@ -332,63 +346,98 @@ func padLeft(s string, width int, pad byte) string {
 	return string(buf)
 }
 
-func insertComma(s string) string {
-	n := len(s)
-	if n <= 3 {
-		return s
+// formatScaled formats a scaled int64 with optional thousand-separator
+// commas, producing exactly `precision` digits after the decimal point
+// (zero-padded on both sides). Works directly on the scaled integer — no
+// float64 round-trip, no fmt.Sprintf — single allocation for the result.
+func formatScaled(scaled int64, precision int, useComma bool) string {
+	if precision < 0 {
+		precision = 0
 	}
-	var b strings.Builder
-	offset := n % 3
-	if offset > 0 {
-		b.WriteString(s[:offset])
-		if n > offset {
-			b.WriteString(",")
-		}
+	neg := scaled < 0
+	u := uint64(scaled)
+	if neg {
+		u = uint64(-scaled)
 	}
-	for i := offset; i < n; i += 3 {
-		b.WriteString(s[i : i+3])
-		if i+3 < n {
-			b.WriteString(",")
-		}
-	}
-	return b.String()
-}
+	intPart := u / Scale
+	fracPart := u % Scale
 
-func formatNumber(value float64, precision int, useComma bool) string {
-	format := fmt.Sprintf("%%.%df", precision)
-	s := fmt.Sprintf(format, value)
-
-	parts := strings.Split(s, ".")
-	intPart := parts[0]
-	fracPart := ""
-	if len(parts) > 1 {
-		fracPart = parts[1]
+	// fracPart carries 6 digits; keep min(precision, 6), pad the rest with zeros.
+	fracDigits := precision
+	extraZeros := 0
+	if fracDigits > 6 {
+		extraZeros = fracDigits - 6
+		fracDigits = 6
 	}
-	if useComma {
-		neg := strings.HasPrefix(intPart, "-")
-		if neg {
-			intPart = insertComma(intPart[1:])
-			intPart = "-" + intPart
-		} else {
-			intPart = insertComma(intPart)
+	for i := 6; i > fracDigits; i-- {
+		fracPart /= 10
+	}
+
+	var intBuf [20]byte
+	intLen := 0
+	if intPart == 0 {
+		intBuf[0] = '0'
+		intLen = 1
+	} else {
+		for intPart > 0 {
+			intBuf[intLen] = byte('0' + intPart%10)
+			intPart /= 10
+			intLen++
 		}
 	}
-	if precision == 0 {
-		return intPart
+
+	commas := 0
+	if useComma && intLen > 3 {
+		commas = (intLen - 1) / 3
 	}
-	return intPart + "." + fracPart
+	total := intLen + commas
+	if neg {
+		total++
+	}
+	if precision > 0 {
+		total += 1 + precision
+	}
+
+	buf := make([]byte, total)
+	idx := 0
+	if neg {
+		buf[idx] = '-'
+		idx++
+	}
+	for i := intLen - 1; i >= 0; i-- {
+		buf[idx] = intBuf[i]
+		idx++
+		if useComma && i > 0 && i%3 == 0 {
+			buf[idx] = ','
+			idx++
+		}
+	}
+	if precision > 0 {
+		buf[idx] = '.'
+		idx++
+		for i := fracDigits - 1; i >= 0; i-- {
+			buf[idx+i] = byte('0' + byte(fracPart%10))
+			fracPart /= 10
+		}
+		idx += fracDigits
+		for i := 0; i < extraZeros; i++ {
+			buf[idx+i] = '0'
+		}
+		idx += extraZeros
+	}
+	return string(buf[:idx])
 }
 
 func (m Value) FormatString() string {
-	return formatNumber(m.Round(2).Float64(), 2, true)
+	return formatScaled(m.Round(2).scaled, 2, true)
 }
 
 func (m Value) FormatNumber() string {
-	return formatNumber(m.Round(2).Float64(), 2, false)
+	return formatScaled(m.Round(2).scaled, 2, false)
 }
 
 func (m Value) FormatNumberWithPrecision(precision int) string {
-	return formatNumber(m.Round(int32(precision)).Float64(), precision, false)
+	return formatScaled(m.Round(int32(precision)).scaled, precision, false)
 }
 
 func (m Value) FormatNumberWithoutDecimal() string {
@@ -504,46 +553,86 @@ func (m *Value) Scan(value interface{}) error {
 	return nil
 }
 
+// setFromString is a single-pass parser: no intermediate string allocations
+// (no TrimSpace/Cut/ParseInt). Fractional digits beyond 6 are truncated.
+// Integer part >13 digits or total magnitude >MaxInt64 is rejected as
+// out-of-range (the legacy impl wrapped silently).
 func (m *Value) setFromString(s string) error {
-	trimmed := strings.TrimSpace(s)
-	if trimmed == "" {
+	start, end := 0, len(s)
+	for start < end && isAsciiSpace(s[start]) {
+		start++
+	}
+	for end > start && isAsciiSpace(s[end-1]) {
+		end--
+	}
+	if start == end {
 		*m = Value{}
 		return nil
 	}
-	body := trimmed
+	i := start
 	neg := false
-	switch body[0] {
+	switch s[i] {
 	case '-':
 		neg = true
-		body = body[1:]
+		i++
 	case '+':
-		body = body[1:]
+		i++
 	}
 
-	intStr, fracStr, _ := strings.Cut(body, ".")
-	if intStr == "" {
-		intStr = "0"
+	var intVal, fracVal uint64
+	var intDigits, fracDigits int
+	sawDigit := false
+	sawDot := false
+
+	for ; i < end; i++ {
+		c := s[i]
+		if c == '.' {
+			if sawDot {
+				return fmt.Errorf("invalid Value %q", s)
+			}
+			sawDot = true
+			continue
+		}
+		if c < '0' || c > '9' {
+			return fmt.Errorf("invalid Value %q", s)
+		}
+		d := uint64(c - '0')
+		if sawDot {
+			if fracDigits < 6 {
+				fracVal = fracVal*10 + d
+				fracDigits++
+			}
+			// else: truncate extra fractional digits
+		} else {
+			if intDigits >= 13 {
+				return fmt.Errorf("value out of range: %q", s)
+			}
+			intVal = intVal*10 + d
+			intDigits++
+		}
+		sawDigit = true
 	}
-	ip, err := strconv.ParseInt(intStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid Value %q: %w", s, err)
-	}
-	if len(fracStr) > 6 {
-		fracStr = fracStr[:6]
-	}
-	for len(fracStr) < 6 {
-		fracStr += "0"
-	}
-	fp, err := strconv.ParseInt(fracStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid fraction %q: %w", fracStr, err)
+	if !sawDigit && !sawDot {
+		return fmt.Errorf("invalid Value %q", s)
 	}
 
-	result := ip*Scale + fp
+	for ; fracDigits < 6; fracDigits++ {
+		fracVal *= 10
+	}
+
+	u := intVal*Scale + fracVal
+	if u > math.MaxInt64 {
+		return fmt.Errorf("value out of range: %q", s)
+	}
+	result := int64(u)
 	if neg {
 		result = -result
 	}
 	m.scaled = result
 	m.raw = s
 	return nil
+}
+
+func isAsciiSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'
 }

@@ -283,7 +283,11 @@ func formatNumber(value float64, precision int, useComma bool) string {
 	}
 
 	if useComma {
-		intPart = insertComma(intPart)
+		if strings.HasPrefix(intPart, "-") {
+			intPart = "-" + insertComma(intPart[1:])
+		} else {
+			intPart = insertComma(intPart)
+		}
 	}
 
 	if precision == 0 {
