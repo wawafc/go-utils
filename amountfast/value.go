@@ -42,6 +42,9 @@ func FromFloat(f float64) Value     { return Value{scaled: int64(math.Round(f * 
 func FromInt(i int) Value           { return Value{scaled: int64(i) * Scale} }
 func FromInt64(i int64) Value       { return Value{scaled: i * Scale} }
 func FromInt32(i int32) Value       { return Value{scaled: int64(i) * Scale} }
+func FromUint(i uint) Value         { return Value{scaled: int64(i) * Scale} }
+func FromUint64(i uint64) Value     { return Value{scaled: int64(i) * Scale} }
+func FromUint32(i uint32) Value     { return Value{scaled: int64(i) * Scale} }
 func FromScaled(scaled int64) Value { return Value{scaled: scaled} }
 
 func FromString(s string) (Value, error) {
@@ -147,8 +150,8 @@ func (m Value) IsNegativeOrZero() bool { return m.scaled <= 0 }
 func (m Value) Equal(o Value) bool              { return m.scaled == o.scaled }
 func (m Value) GreaterThan(o Value) bool        { return m.scaled > o.scaled }
 func (m Value) GreaterThanOrEqual(o Value) bool { return m.scaled >= o.scaled }
-func (m Value) LessThan(o Value) bool            { return m.scaled < o.scaled }
-func (m Value) LessThanOrEqual(o Value) bool     { return m.scaled <= o.scaled }
+func (m Value) LessThan(o Value) bool           { return m.scaled < o.scaled }
+func (m Value) LessThanOrEqual(o Value) bool    { return m.scaled <= o.scaled }
 
 func (m Value) Cmp(o Value) int {
 	switch {
