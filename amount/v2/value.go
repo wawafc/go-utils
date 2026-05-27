@@ -1,4 +1,4 @@
-package amount2
+package amount
 
 import (
 	"database/sql/driver"
